@@ -31,7 +31,8 @@ const RECORDING_CONFIG = {
 
 const SWIPE_CONFIG = {
   CANCEL_DISTANCE_PX: -60, // Minimum leftward distance to trigger cancel state
-  CANCEL_VELOCITY_PX_S: -2000, // Minimum leftward velocity to trigger cancel state
+  CANCEL_VELOCITY_PX_S: -2000, // Minimum leftward velocity to trigger cancel state (desktop)
+  CANCEL_VELOCITY_PX_S_MOBILE: -1000, // Minimum leftward velocity to trigger cancel state (mobile - half of desktop)
   RESET_DISTANCE_PX: -50, // Distance threshold to reset cancel state when swiping right
   AUTO_RESET_DELAY_MS: 500, // Time before cancel state automatically resets
 } as const;
@@ -66,7 +67,14 @@ interface RecordingContextType {
   trashIconRef: TrashIconRef | null;
   containerRef(element: HTMLOrSVGElement | null): void;
   containerWidth: number;
-  startRecording: (event?: MouseEvent | PointerEvent | TouchEvent) => void;
+  startRecording: (
+    event?:
+      | MouseEvent
+      | PointerEvent
+      | TouchEvent
+      | React.PointerEvent
+      | React.TouchEvent
+  ) => void;
   stopRecording: () => void;
 }
 
@@ -90,6 +98,7 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isNearTrash, setIsNearTrash] = useState(false);
   const [isSwipeCancel, setIsSwipeCancel] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [cursorScale, setCursorScale] = useState<number>(
     ANIMATION_CONFIG.CURSOR_SCALE_MIN
   );
@@ -147,12 +156,12 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
             Math.abs(distance) / Math.abs(SWIPE_CONFIG.CANCEL_DISTANCE_PX)
           )
         );
+        const velocityThreshold = isTouchDevice
+          ? SWIPE_CONFIG.CANCEL_VELOCITY_PX_S_MOBILE
+          : SWIPE_CONFIG.CANCEL_VELOCITY_PX_S;
         const velocityProgress = Math.max(
           0,
-          Math.min(
-            1,
-            Math.abs(velocity) / Math.abs(SWIPE_CONFIG.CANCEL_VELOCITY_PX_S)
-          )
+          Math.min(1, Math.abs(velocity) / Math.abs(velocityThreshold))
         );
         const swipeProgress = Math.max(distanceProgress, velocityProgress);
 
@@ -165,9 +174,12 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
       }
 
       // Check if we should show cancel state based on distance and velocity
+      const velocityThreshold = isTouchDevice
+        ? SWIPE_CONFIG.CANCEL_VELOCITY_PX_S_MOBILE
+        : SWIPE_CONFIG.CANCEL_VELOCITY_PX_S;
       if (
         distance < SWIPE_CONFIG.CANCEL_DISTANCE_PX &&
-        velocity < SWIPE_CONFIG.CANCEL_VELOCITY_PX_S
+        velocity < velocityThreshold
       ) {
         setIsSwipeCancel(true);
 
@@ -191,16 +203,33 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
     }
   });
 
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      const newPosition = { x: e.clientX - 8, y: e.clientY - 8 };
+  const handleMove = useCallback(
+    (e: MouseEvent | TouchEvent) => {
+      let clientX: number, clientY: number;
+
+      if ("touches" in e && e.touches.length > 0) {
+        // Touch event - prevent default to avoid scrolling
+        e.preventDefault();
+        setIsTouchDevice(true);
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else if ("clientX" in e) {
+        // Mouse event
+        setIsTouchDevice(false);
+        clientX = e.clientX;
+        clientY = e.clientY;
+      } else {
+        return;
+      }
+
+      const newPosition = { x: clientX - 8, y: clientY - 8 };
       setMousePosition(newPosition);
 
       // Update motion value for velocity tracking
-      x.set(e.clientX);
+      x.set(clientX);
 
       if (recordingDuration !== null) {
-        checkProximity(e.clientX, e.clientY);
+        checkProximity(clientX, clientY);
       }
     },
     [checkProximity, recordingDuration, x]
@@ -225,10 +254,12 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
         });
       }, RECORDING_CONFIG.WAVEFORM_INTERVAL_MS);
 
-      // Track mouse position
-      document.addEventListener("mousemove", handleMouseMove);
+      // Track mouse and touch position
+      document.addEventListener("mousemove", handleMove);
+      document.addEventListener("touchmove", handleMove, { passive: false });
       document.body.style.cursor = "grab";
       document.body.style.userSelect = "none";
+      document.body.style.touchAction = "none"; // Prevent touch gestures
     } else {
       setIsNearTrash(false);
     }
@@ -242,21 +273,46 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
         clearInterval(barIntervalRef.current);
         barIntervalRef.current = null;
       }
-      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mousemove", handleMove);
+      document.removeEventListener("touchmove", handleMove);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      document.body.style.touchAction = "";
     };
-  }, [recordingDuration !== null, x, checkProximity, handleMouseMove]);
+  }, [recordingDuration, x, checkProximity, handleMove]);
 
   const startRecording = useCallback(
-    (event?: MouseEvent | PointerEvent | TouchEvent) => {
-      if (event && "clientX" in event && "clientY" in event) {
-        const newPosition = { x: event.clientX - 8, y: event.clientY - 8 };
+    (
+      event?:
+        | MouseEvent
+        | PointerEvent
+        | TouchEvent
+        | React.PointerEvent
+        | React.TouchEvent
+    ) => {
+      if (event) {
+        let clientX: number, clientY: number;
+
+        if ("touches" in event && event.touches.length > 0) {
+          // Touch event
+          setIsTouchDevice(true);
+          clientX = event.touches[0].clientX;
+          clientY = event.touches[0].clientY;
+        } else if ("clientX" in event && "clientY" in event) {
+          // Mouse/Pointer event
+          setIsTouchDevice(false);
+          clientX = event.clientX;
+          clientY = event.clientY;
+        } else {
+          return;
+        }
+
+        const newPosition = { x: clientX - 8, y: clientY - 8 };
         setMousePosition(newPosition);
         // Initialize motion value and store starting position
-        x.set(event.clientX);
-        startPositionRef.current = event.clientX;
-        checkProximity(event.clientX, event.clientY);
+        x.set(clientX);
+        startPositionRef.current = clientX;
+        checkProximity(clientX, clientY);
       }
 
       timeoutRef.current = setTimeout(() => {
@@ -524,14 +580,15 @@ const RecordingCursor = memo(() => {
   const { isCancel, mousePosition, isRecording, trashIconRef, cursorScale } =
     useRecordingContext();
 
+  const trashIconElement = trashIconRef?.current;
   const trashCenter = useMemo(() => {
-    if (!trashIconRef!.current) return { x: 0, y: 0 };
-    const rect = trashIconRef!.current.getBoundingClientRect();
+    if (!trashIconElement) return { x: 0, y: 0 };
+    const rect = trashIconElement.getBoundingClientRect();
     return {
       x: rect.left + rect.width / 2,
       y: rect.top + rect.height / 2,
     };
-  }, [trashIconRef!.current, isRecording]);
+  }, [trashIconElement]);
 
   return (
     <AnimatePresence>
