@@ -1,9 +1,5 @@
 @import "tailwindcss";
 
-* {
-  user-select: none;
-}
-
 @theme {
   --default-font-family: var(--font-sans), sans-serif;
 }

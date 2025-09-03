@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="has-[[data-recording]]:select-none">
       <body className={`${sans.variable} ${sans.className} antialiased`}>
         {children}
       </body>

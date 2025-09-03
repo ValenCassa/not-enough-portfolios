@@ -55,6 +55,16 @@ const ANIMATION_CONFIG = {
 type Position = { x: number; y: number };
 type TrashIconRef = React.RefObject<HTMLElement | null>;
 
+interface RecordingState {
+  recordingDuration: number | null;
+  bars: number[];
+  mousePosition: Position;
+  isNearTrash: boolean;
+  isSwipeCancel: boolean;
+  isTouchDevice: boolean;
+  cursorScale: number;
+}
+
 interface RecordingContextType {
   recordingDuration: number | null;
   bars: number[];
@@ -91,17 +101,15 @@ const useRecordingContext = () => {
 };
 
 const RecordingProvider = ({ children }: PropsWithChildren) => {
-  const [recordingDuration, setRecordingDuration] = useState<number | null>(
-    null
-  );
-  const [bars, setBars] = useState<number[]>([]);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [isNearTrash, setIsNearTrash] = useState(false);
-  const [isSwipeCancel, setIsSwipeCancel] = useState(false);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const [cursorScale, setCursorScale] = useState<number>(
-    ANIMATION_CONFIG.CURSOR_SCALE_MIN
-  );
+  const [state, setState] = useState<RecordingState>({
+    recordingDuration: null,
+    bars: [],
+    mousePosition: { x: 0, y: 0 },
+    isNearTrash: false,
+    isSwipeCancel: false,
+    isTouchDevice: false,
+    cursorScale: ANIMATION_CONFIG.CURSOR_SCALE_MIN,
+  });
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const barIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -116,6 +124,16 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
   // Motion values for velocity tracking
   const x = useMotionValue(0);
   const xVelocity = useVelocity(x);
+
+  const {
+    recordingDuration,
+    bars,
+    mousePosition,
+    isNearTrash,
+    isSwipeCancel,
+    isTouchDevice,
+    cursorScale,
+  } = state;
 
   const isCancel = useMemo(
     () => isNearTrash || isSwipeCancel,
@@ -134,7 +152,10 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
         Math.pow(mouseY + 8 - trashCenterY, 2)
     );
 
-    setIsNearTrash(distance <= PROXIMITY_CONFIG.TRASH_THRESHOLD_PX);
+    setState((prev) => ({
+      ...prev,
+      isNearTrash: distance <= PROXIMITY_CONFIG.TRASH_THRESHOLD_PX,
+    }));
   }, []);
 
   // Listen for velocity changes to detect swipe-to-cancel
@@ -146,7 +167,10 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
 
       // Reset scale to minimum if velocity is low (not actively swiping)
       if (Math.abs(velocity) < 100) {
-        setCursorScale(ANIMATION_CONFIG.CURSOR_SCALE_MIN);
+        setState((prev) => ({
+          ...prev,
+          cursorScale: ANIMATION_CONFIG.CURSOR_SCALE_MIN,
+        }));
       } else {
         // Calculate scale based on swipe progress only when actively swiping
         const distanceProgress = Math.max(
@@ -170,7 +194,7 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
           (ANIMATION_CONFIG.CURSOR_SCALE_MAX -
             ANIMATION_CONFIG.CURSOR_SCALE_MIN) *
             swipeProgress;
-        setCursorScale(newScale);
+        setState((prev) => ({ ...prev, cursorScale: newScale }));
       }
 
       // Check if we should show cancel state based on distance and velocity
@@ -181,7 +205,7 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
         distance < SWIPE_CONFIG.CANCEL_DISTANCE_PX &&
         velocity < velocityThreshold
       ) {
-        setIsSwipeCancel(true);
+        setState((prev) => ({ ...prev, isSwipeCancel: true }));
 
         if (swipeCancelTimeoutRef.current) {
           clearTimeout(swipeCancelTimeoutRef.current);
@@ -189,7 +213,7 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
 
         // Set timeout to automatically revert cancel state after 500ms
         swipeCancelTimeoutRef.current = setTimeout(() => {
-          setIsSwipeCancel(false);
+          setState((prev) => ({ ...prev, isSwipeCancel: false }));
           swipeCancelTimeoutRef.current = null;
         }, SWIPE_CONFIG.AUTO_RESET_DELAY_MS);
       } else if (distance > SWIPE_CONFIG.RESET_DISTANCE_PX) {
@@ -198,7 +222,7 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
           clearTimeout(swipeCancelTimeoutRef.current);
           swipeCancelTimeoutRef.current = null;
         }
-        setIsSwipeCancel(false);
+        setState((prev) => ({ ...prev, isSwipeCancel: false }));
       }
     }
   });
@@ -210,12 +234,12 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
       if ("touches" in e && e.touches.length > 0) {
         // Touch event - prevent default to avoid scrolling
         e.preventDefault();
-        setIsTouchDevice(true);
+        setState((prev) => ({ ...prev, isTouchDevice: true }));
         clientX = e.touches[0].clientX;
         clientY = e.touches[0].clientY;
       } else if ("clientX" in e) {
         // Mouse event
-        setIsTouchDevice(false);
+        setState((prev) => ({ ...prev, isTouchDevice: false }));
         clientX = e.clientX;
         clientY = e.clientY;
       } else {
@@ -223,7 +247,7 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
       }
 
       const newPosition = { x: clientX - 8, y: clientY - 8 };
-      setMousePosition(newPosition);
+      setState((prev) => ({ ...prev, mousePosition: newPosition }));
 
       // Update motion value for velocity tracking
       x.set(clientX);
@@ -239,18 +263,21 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
     if (recordingDuration !== null) {
       // Duration counter (every 1 second)
       intervalRef.current = setInterval(() => {
-        setRecordingDuration((prev) => (prev ?? 0) + 1);
+        setState((prev) => ({
+          ...prev,
+          recordingDuration: (prev.recordingDuration ?? 0) + 1,
+        }));
       }, RECORDING_CONFIG.DURATION_INTERVAL_MS);
 
       // Bar counter (every 0.25 seconds)
       barIntervalRef.current = setInterval(() => {
-        setBars((prev) => {
+        setState((prev) => {
           const newHeight =
             Math.random() *
               (RECORDING_CONFIG.MAX_BAR_HEIGHT -
                 RECORDING_CONFIG.MIN_BAR_HEIGHT) +
             RECORDING_CONFIG.MIN_BAR_HEIGHT;
-          return [...prev, newHeight];
+          return { ...prev, bars: [...prev.bars, newHeight] };
         });
       }, RECORDING_CONFIG.WAVEFORM_INTERVAL_MS);
 
@@ -258,10 +285,8 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
       document.addEventListener("mousemove", handleMove);
       document.addEventListener("touchmove", handleMove, { passive: false });
       document.body.style.cursor = "grab";
-      document.body.style.userSelect = "none";
-      document.body.style.touchAction = "none"; // Prevent touch gestures
     } else {
-      setIsNearTrash(false);
+      setState((prev) => ({ ...prev, isNearTrash: false }));
     }
 
     return () => {
@@ -276,8 +301,6 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
       document.removeEventListener("mousemove", handleMove);
       document.removeEventListener("touchmove", handleMove);
       document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      document.body.style.touchAction = "";
     };
   }, [recordingDuration, x, checkProximity, handleMove]);
 
@@ -290,17 +313,18 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
         | React.PointerEvent
         | React.TouchEvent
     ) => {
+      document.body.setAttribute("data-recording", "true");
       if (event) {
         let clientX: number, clientY: number;
 
         if ("touches" in event && event.touches.length > 0) {
           // Touch event
-          setIsTouchDevice(true);
+          setState((prev) => ({ ...prev, isTouchDevice: true }));
           clientX = event.touches[0].clientX;
           clientY = event.touches[0].clientY;
         } else if ("clientX" in event && "clientY" in event) {
           // Mouse/Pointer event
-          setIsTouchDevice(false);
+          setState((prev) => ({ ...prev, isTouchDevice: false }));
           clientX = event.clientX;
           clientY = event.clientY;
         } else {
@@ -308,7 +332,7 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
         }
 
         const newPosition = { x: clientX - 8, y: clientY - 8 };
-        setMousePosition(newPosition);
+        setState((prev) => ({ ...prev, mousePosition: newPosition }));
         // Initialize motion value and store starting position
         x.set(clientX);
         startPositionRef.current = clientX;
@@ -316,13 +340,14 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
       }
 
       timeoutRef.current = setTimeout(() => {
-        setRecordingDuration(0);
+        setState((prev) => ({ ...prev, recordingDuration: 0 }));
       }, RECORDING_CONFIG.DELAY_MS);
     },
     [x, checkProximity]
   );
 
   const stopRecording = useCallback(() => {
+    document.body.removeAttribute("data-recording");
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -333,11 +358,15 @@ const RecordingProvider = ({ children }: PropsWithChildren) => {
       swipeCancelTimeoutRef.current = null;
     }
 
-    setBars([]);
-    setRecordingDuration(null);
-    setIsNearTrash(false);
-    setIsSwipeCancel(false);
-    setCursorScale(ANIMATION_CONFIG.CURSOR_SCALE_MIN);
+    setState({
+      recordingDuration: null,
+      bars: [],
+      mousePosition: { x: 0, y: 0 },
+      isNearTrash: false,
+      isSwipeCancel: false,
+      isTouchDevice: false,
+      cursorScale: ANIMATION_CONFIG.CURSOR_SCALE_MIN,
+    });
   }, []);
 
   const value: RecordingContextType = useMemo(
