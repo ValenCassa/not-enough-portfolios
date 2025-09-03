@@ -23,11 +23,11 @@ export const metadata: Metadata = {
   title: "Valentin Cassarino",
   description: "Economist turned design engineer based in Argentina",
   openGraph: {
-    images: ["https://valencassa.com/og-image.png"],
+    images: ["https://valencassa.dev/og-image.png"],
   },
   twitter: {
     card: "summary_large_image",
-    images: ["https://valencassa.com/og-image.png"],
+    images: ["https://valencassa.dev/og-image.png"],
   },
 };
 
