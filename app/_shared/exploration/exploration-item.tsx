@@ -2,7 +2,7 @@
 
 import { ExplorationItemImage } from "./exploration-item-image";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
-import { useState, useCallback } from "react";
+import { useRef } from "react";
 
 interface ExplorationItemProps {
   title: string;
@@ -14,36 +14,8 @@ export const ExplorationItem = ({
   description,
   images,
 }: ExplorationItemProps) => {
-  const [scrollState, setScrollState] = useState({
-    canScrollLeft: false,
-    canScrollRight: false,
-  });
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const updateScrollState = useCallback((element: HTMLDivElement) => {
-    const { scrollLeft, scrollWidth, clientWidth } = element;
-    setScrollState({
-      canScrollLeft: scrollLeft > 0,
-      canScrollRight: scrollLeft < scrollWidth - clientWidth,
-    });
-  }, []);
-
-  const viewportRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (node) {
-        const handleScroll = () => updateScrollState(node);
-
-        // Initial check
-        updateScrollState(node);
-
-        // Add scroll listener
-        node.addEventListener("scroll", handleScroll);
-
-        // Cleanup function
-        return () => node.removeEventListener("scroll", handleScroll);
-      }
-    },
-    [updateScrollState]
-  );
   return (
     <div className="space-y-4">
       <div className="space-y-0.5">
@@ -53,10 +25,32 @@ export const ExplorationItem = ({
 
       <div className="relative">
         <ScrollArea.Root
-          className="w-full overflow-hidden h-[140px]"
+          className="w-full isolate overflow-hidden h-[140px] relative before:opacity-0 before:z-10 data-[left-fade]:before:opacity-100 before:absolute before:left-0 before:top-0 before:w-8 before:h-[128px] before:bg-gradient-to-r before:from-white before:to-transparent before:pointer-events-none before:transition-opacity before:duration-200 after:opacity-0 after:z-10 data-[right-fade]:after:opacity-100 after:absolute after:right-0 after:top-0 after:w-8 after:h-[128px] after:bg-gradient-to-l after:from-white after:to-transparent after:pointer-events-none after:transition-opacity after:duration-200"
           scrollHideDelay={100}
+          ref={scrollAreaRef}
         >
-          <ScrollArea.Viewport ref={viewportRef} className="w-full h-[128px]">
+          <ScrollArea.Viewport
+            id="exploration-item-viewport"
+            className="w-full relative h-[128px]"
+            onScroll={(e) => {
+              const element = e.currentTarget as HTMLDivElement;
+
+              if (element.scrollLeft > 0) {
+                scrollAreaRef.current!.setAttribute("data-left-fade", "true");
+              } else {
+                scrollAreaRef.current!.removeAttribute("data-left-fade");
+              }
+
+              if (
+                element.scrollLeft <
+                element.scrollWidth - element.clientWidth
+              ) {
+                scrollAreaRef.current!.setAttribute("data-right-fade", "true");
+              } else {
+                scrollAreaRef.current!.removeAttribute("data-right-fade");
+              }
+            }}
+          >
             <div className="flex gap-3">
               {images.map((img) => {
                 return <ExplorationItemImage key={img} src={img} alt={title} />;
@@ -71,20 +65,6 @@ export const ExplorationItem = ({
             <ScrollArea.Thumb className="flex-1 bg-stone-400 rounded-[10px] relative before:content-[''] before:absolute before:top-1/2 before:left-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:w-full before:h-full before:min-w-[44px] before:min-h-[44px]" />
           </ScrollArea.Scrollbar>
         </ScrollArea.Root>
-
-        {/* Left fade */}
-        <div
-          className={`absolute left-0 top-0 w-8 h-[128px] bg-gradient-to-r from-white to-transparent pointer-events-none transition-opacity duration-200 ${
-            scrollState.canScrollLeft ? "opacity-100" : "opacity-0"
-          }`}
-        />
-
-        {/* Right fade */}
-        <div
-          className={`absolute right-0 top-0 w-8 h-[128px] bg-gradient-to-l from-white to-transparent pointer-events-none transition-opacity duration-200 ${
-            scrollState.canScrollRight ? "opacity-100" : "opacity-0"
-          }`}
-        />
       </div>
     </div>
   );
