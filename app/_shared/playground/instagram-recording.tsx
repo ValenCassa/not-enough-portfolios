@@ -796,11 +796,40 @@ const PlusButton = memo(() => (
 
 PlusButton.displayName = "PlusButton";
 
+const HelpMessage = memo(() => {
+  const { isRecording, isCancel } = useRecordingContext();
+
+  if (isCancel) {
+    return (
+      <p className="text-sm font-medium text-stone-400 text-center w-full block">
+        Release to cancel
+      </p>
+    );
+  }
+
+  if (isRecording) {
+    return (
+      <p className="text-sm font-medium text-stone-400 text-center w-full block">
+        Swipe left to cancel
+      </p>
+    );
+  }
+  return (
+    <p className="text-sm font-medium text-stone-400 text-center w-full block">
+      Press and hold to record
+    </p>
+  );
+});
+
+HelpMessage.displayName = "HelpMessage";
+
 const MessageInput = memo(() => {
   const { startRecording, stopRecording, containerRef } = useRecordingContext();
 
   return (
     <>
+      <HelpMessage />
+
       <RecordingCursor />
 
       <div

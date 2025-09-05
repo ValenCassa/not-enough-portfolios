@@ -23,7 +23,10 @@ export const Playground = () => {
         title="Instagram Recording"
         description="Web recreation of Instagram's iconic recording animation interface"
       >
-        <PlaygroundItemContainer codesandbox="https://codesandbox.io/p/devbox/cassa-animation-forked-2nzc33?file=%2Fsrc%2FApp.tsx%3A1%2C1-1021%2C1">
+        <PlaygroundItemContainer
+          className="flex-col gap-1 h-[250px]"
+          codesandbox="https://codesandbox.io/p/devbox/cassa-animation-forked-2nzc33?file=%2Fsrc%2FApp.tsx%3A1%2C1-1021%2C1"
+        >
           <InstagramRecording />
         </PlaygroundItemContainer>
       </PlaygroundItem>
