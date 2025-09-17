@@ -1,5 +1,6 @@
 import { Exploration } from "./_shared/exploration";
 import { Header } from "./_shared/header";
+import { LiveProjects } from "./_shared/live-projects";
 import { Playground } from "./_shared/playground";
 import { SayHi } from "./_shared/say-hi";
 
@@ -9,6 +10,7 @@ export default function Home() {
       <div className="max-w-[600px] mx-auto w-full space-y-16">
         <Header />
         <Playground />
+        <LiveProjects />
         <Exploration />
         <SayHi />
       </div>
